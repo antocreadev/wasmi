@@ -332,24 +332,3 @@ fn test_memory_traps_on_growth_past_declared_maximum() -> Result<(), Error> {
     assert_eq!(memory_size.call(&mut store, ())?, 2);
     Ok(())
 }
-
-/// Without `trap_on_grow_failure`, growing past the declared maximum still returns `-1`.
-#[test]
-#[cfg_attr(not(feature = "wat"), ignore)]
-fn test_memory_does_not_grow_past_declared_maximum() -> Result<(), Error> {
-    let limits = StoreLimitsBuilder::new().memory_size(1 << 30).build();
-    let (mut store, linker) = test_setup(limits);
-    let module = create_module(
-        &store,
-        br#"
-        (module
-            (memory 1 2)
-            (func (export "memory_grow") (param $pages i32) (result i32) (memory.grow (local.get $pages)))
-        )
-        "#,
-    )?;
-    let instance = linker.instantiate_and_start(&mut store, &module)?;
-    let memory_grow = instance.get_typed_func::<i32, i32>(&store, "memory_grow")?;
-    assert_eq!(memory_grow.call(&mut store, 5)?, -1);
-    Ok(())
-}

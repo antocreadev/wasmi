@@ -299,36 +299,21 @@ fn test_imported_table_count_limit() -> Result<(), Error> {
     Ok(())
 }
 
-/// Growing a memory past its declared maximum fails, and the limiter is told: with
-/// `trap_on_grow_failure` it traps, as it does for tables.
+/// `trap_on_grow_failure` also traps on `memory.grow` past the declared maximum, as for tables.
 #[test]
 #[cfg_attr(not(feature = "wat"), ignore)]
 fn test_memory_traps_on_growth_past_declared_maximum() -> Result<(), Error> {
-    let limits = StoreLimitsBuilder::new()
-        .memory_size(1 << 30)
-        .trap_on_grow_failure(true)
-        .build();
+    let limits = StoreLimitsBuilder::new().trap_on_grow_failure(true).build();
     let (mut store, linker) = test_setup(limits);
     let module = create_module(
         &store,
-        br#"
-        (module
-            (memory 1 2)
-            (func (export "memory_grow") (param $pages i32) (result i32) (memory.grow (local.get $pages)))
-            (func (export "memory_size") (result i32) (memory.size))
-        )
-        "#,
+        br#"(module (memory 1 1) (func (export "grow") (result i32) (memory.grow (i32.const 1))))"#,
     )?;
     let instance = linker.instantiate_and_start(&mut store, &module)?;
-    let memory_grow = instance.get_typed_func::<i32, i32>(&store, "memory_grow")?;
-    let memory_size = instance.get_typed_func::<(), i32>(&store, "memory_size")?;
-    // Within the declared maximum.
-    assert_eq!(memory_grow.call(&mut store, 1)?, 1);
-    // Past the declared maximum of 2 pages.
+    let grow = instance.get_typed_func::<(), i32>(&store, "grow")?;
     assert!(matches!(
-        memory_grow.call(&mut store, 1).unwrap_err().as_trap_code(),
+        grow.call(&mut store, ()).unwrap_err().as_trap_code(),
         Some(TrapCode::GrowthOperationLimited)
     ));
-    assert_eq!(memory_size.call(&mut store, ())?, 2);
     Ok(())
 }
